@@ -1,7 +1,7 @@
 # BBB Downloader GUI
 
 A desktop GUI built with [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)
-that wraps the [bbb-downloader](https://github.com/soulgalore/bbb-downloader) scripts,
+that wraps the [bbb-downloader](https://github.com/trahay/bbb-downloader) scripts,
 so you can download and merge BBB recordings without
 a terminal. It drives the same pipeline (`download_bbb_data.py` → `ffmpeg` mux), adds
 a paste-from-clipboard button, remembers the last save folder, and exposes the merge
