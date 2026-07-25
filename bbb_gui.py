@@ -48,6 +48,19 @@ try:
 except Exception:  # pragma: no cover — pyperclip is optional
     pyperclip = None
 
+# Drag & drop support (tkinterdnd2 — optional but expected installed).
+try:
+    from tkinterdnd2 import TkinterDnD, DND_FILES  # type: ignore
+except Exception:  # pragma: no cover — dnd disabled if missing
+    TkinterDnD = None  # type: ignore
+    DND_FILES = None  # type: ignore
+
+# Tooltips (CTkToolTip — optional, installed separately).
+try:
+    from CTkToolTip.ctk_tooltip import CTkToolTip  # type: ignore
+except Exception:  # pragma: no cover
+    CTkToolTip = None  # type: ignore
+
 # Local modules — keep these sibling imports simple so PyInstaller bundling
 # works the same as source layout.
 import bbb_core
@@ -89,13 +102,22 @@ def save_last_folder(folder: str) -> None:
 # Main application
 # ---------------------------------------------------------------------------
 
-class App(ctk.CTk):
+class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
     """The top-level BBB Downloader GUI window."""
 
     # -------- construction ------------------------------------------------
 
     def __init__(self) -> None:
         super().__init__()
+        self._dnd_ok = False  # set True only if tkdnd loads
+        if TkinterDnD is not None:
+            try:
+                self.TkdndVersion = TkinterDnD._require(self)
+                self._dnd_ok = True
+            except Exception as e:
+                # tkdnd native lib missing/wrong arch — disable DnD, keep GUI
+                import sys
+                print(f"[DnD] disabled: {e}", file=sys.stderr)
         self.title("BBB Downloader")
         self.geometry("800x720")
         ctk.set_appearance_mode("Dark")
@@ -136,6 +158,7 @@ class App(ctk.CTk):
             command=self.change_theme,
         )
         theme_menu.grid(row=0, column=1, sticky="e")
+        self._tip(theme_menu, "Switch app appearance between Dark and Light theme")
 
     # -------- tabs --------------------------------------------------------
 
@@ -177,6 +200,8 @@ class App(ctk.CTk):
             height=32,
         )
         self.ffmpeg_btn.grid(row=0, column=1, padx=0, pady=0)
+        self._tip(self.ffmpeg_path_entry, "Custom FFmpeg path (leave empty for auto-detect)")
+        self._tip(self.ffmpeg_btn, "Check if FFmpeg is installed, or download latest version")
 
     # -------- Single Download tab ----------------------------------------
 
@@ -220,6 +245,8 @@ class App(ctk.CTk):
                 self.link_entry_single, self.paste_button_single),
         )
         self.paste_button_single.grid(row=0, column=1, padx=(10, 5))
+        self._tip(self.paste_button_single, "Paste BBB recording URL from clipboard")
+        self._tip(self.link_entry_single, "Paste a BigBlueButton recording URL here")
 
         self.download_button = ctk.CTkButton(
             link_frame, text="Download", width=100,
@@ -228,6 +255,7 @@ class App(ctk.CTk):
             command=self.start_download_single,
         )
         self.download_button.grid(row=0, column=2, padx=(0, 0))
+        self._tip(self.download_button, "Start downloading and merging the recording")
 
         # Options row: checkboxes + format dropdown (compact, packed left)
         self._build_options_row(
@@ -277,12 +305,17 @@ class App(ctk.CTk):
 
     def _build_list_tab(self, tab: ctk.CTkFrame) -> None:
         tab.grid_columnconfigure(0, weight=1)
-        # NOTE: we deliberately configure only the log row (row 10) with
+        # NOTE: we deliberately configure only the log row (row 11) with
         # weight=1 — the link textbox (row 3) and the Get-the-Video banner
-        # (row 8) stay at their fixed pixel heights so changing the window
+        # (row 9) stay at their fixed pixel heights so changing the window
         # height only stretches the log area and never distorts section 2
         # or hides section 3 the way the bug report described.
-        tab.grid_rowconfigure(10, weight=1)
+        # Row layout: 0=location_label, 1=location_entry, 2=section2 label,
+        #   3=links textbox, 4=drop zone (NEW), 5=buttons, 6=options,
+        #   7=spacer (weighted), 8=section3 label, 9=video placeholder,
+        #   10=logs label, 11=log box.
+        tab.grid_rowconfigure(7, weight=1)  # the natural gap row stretches,
+        #                                  # pushing section 3 cleanly downward
 
         # 1. Location
         self._build_location_row(
@@ -300,14 +333,17 @@ class App(ctk.CTk):
         list_label.grid(row=2, column=0, padx=10, pady=(20, 5), sticky="w")
 
         self.links_box_list = ctk.CTkTextbox(
-            tab, height=220,
+            tab, height=100,
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#A0A0A0", "#3E3E3E"), border_width=1,
         )
         self.links_box_list.grid(row=3, column=0, padx=10, pady=5, sticky="new")
 
+        # --- Drag & drop zone (NEW) — row 4, square frame above buttons ---
+        self._build_drop_zone(tab, row=4)
+
         buttons_frame = ctk.CTkFrame(tab, fg_color="transparent")
-        buttons_frame.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
+        buttons_frame.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
         buttons_frame.grid_columnconfigure(0, weight=1)
 
         right_buttons = ctk.CTkFrame(buttons_frame, fg_color="transparent")
@@ -323,6 +359,8 @@ class App(ctk.CTk):
                 self.links_box_list, self.list_paste_button),
         )
         self.list_paste_button.pack(side="left", padx=(0, 5))
+        self._tip(self.list_paste_button, "Paste URL from clipboard")
+        self._tip(self.links_box_list, "Paste one or more BBB recording URLs, one per line")
 
         self.list_import_button = ctk.CTkButton(
             right_buttons, text="Import txt", width=100,
@@ -333,6 +371,7 @@ class App(ctk.CTk):
             command=lambda: self.import_text_file(self.links_box_list),
         )
         self.list_import_button.pack(side="left", padx=(0, 5))
+        self._tip(self.list_import_button, "Load URLs from a .txt file")
 
         self.list_download_button = ctk.CTkButton(
             right_buttons, text="Download", width=100,
@@ -341,10 +380,11 @@ class App(ctk.CTk):
             command=self.start_download_list,
         )
         self.list_download_button.pack(side="left", padx=(0, 0))
+        self._tip(self.list_download_button, "Download all URLs in the list sequentially")
 
         # Options row
         self._build_options_row(
-            tab, row=4,  # NOTE: intentionally stays on row 4 below the textbox
+            tab, row=6,  # NOTE: shifted from row 4 to row 6 to make room for drop zone
             video_var_attr="download_videos_var_2",
             slides_var_attr="download_slides_var_2",
             thumbs_var_attr="download_thumbs_var_2",
@@ -358,10 +398,10 @@ class App(ctk.CTk):
             tab, text="3. Get the Video",
             font=ctk.CTkFont(weight="bold"),
         )
-        video_label.grid(row=7, column=0, padx=10, pady=(20, 5), sticky="nw")
+        video_label.grid(row=9, column=0, padx=10, pady=(20, 5), sticky="nw")
 
         video_placeholder = ctk.CTkFrame(tab, height=80, border_width=1)
-        video_placeholder.grid(row=8, column=0, padx=10, pady=5, sticky="ew")
+        video_placeholder.grid(row=10, column=0, padx=10, pady=5, sticky="ew")
         # Lock the height so resizing the window vertically never collapses
         # or grows this banner — only its width follows the tab frame.
         video_placeholder.grid_propagate(False)
@@ -377,7 +417,7 @@ class App(ctk.CTk):
         # Output Logs
         self._build_logs_row(
             tab, label_text="Logs",
-            logs_label_row=9, logbox_row=10,
+            logs_label_row=10, logbox_row=11,
             logbox_attr="log_box_list",
             initial_text="",
         )
@@ -417,6 +457,8 @@ class App(ctk.CTk):
             command=button_command,
         )
         save_as_button.grid(row=0, column=1, padx=(10, 0))
+        self._tip(entry, "Choose where downloaded videos will be saved")
+        self._tip(save_as_button, "Browse for a folder to save the videos")
 
     def _build_options_row(self, parent: ctk.CTkFrame, *, row: int,
                            video_var_attr: str, slides_var_attr: str,
@@ -461,6 +503,7 @@ class App(ctk.CTk):
             text_color=("black", "white"),
         )
         chk_videos.grid(row=0, column=0, padx=(0, 10), pady=5, sticky="w")
+        self._tip(chk_videos, "Download webcam video stream")
 
         chk_slides = ctk.CTkCheckBox(
             options_frame, text="Slides", variable=slides_var,
@@ -468,6 +511,7 @@ class App(ctk.CTk):
             text_color=("black", "white"),
         )
         chk_slides.grid(row=0, column=1, padx=(0, 10), pady=5, sticky="w")
+        self._tip(chk_slides, "Download slides as images")
 
         chk_thumbs = ctk.CTkCheckBox(
             options_frame, text="Thumbnails", variable=thumbs_var,
@@ -475,6 +519,7 @@ class App(ctk.CTk):
             text_color=("black", "white"),
         )
         chk_thumbs.grid(row=0, column=2, padx=(0, 10), pady=5, sticky="w")
+        self._tip(chk_thumbs, "Download slide thumbnails")
 
         # Optional checkboxes placed in the right-hand cluster.
         if compat_var_attr:
@@ -488,6 +533,7 @@ class App(ctk.CTk):
                 text_color=("black", "white"),
             )
             chk_compat.grid(row=0, column=4, padx=(20, 10), pady=5, sticky="e")
+            self._tip(chk_compat, "Re-encode with libx264+AAC for iOS / older players (slower)")
 
         if keep_raw_var_attr:
             keep_raw_var = ctk.BooleanVar(value=False)
@@ -500,6 +546,7 @@ class App(ctk.CTk):
                 text_color=("black", "white"),
             )
             chk_keep.grid(row=0, column=5, padx=(0, 10), pady=5, sticky="e")
+            self._tip(chk_keep, "Keep intermediate .webm files after merge")
 
         format_label = ctk.CTkLabel(
             options_frame, text="Format:",
@@ -516,6 +563,7 @@ class App(ctk.CTk):
         )
         opt_menu.grid(row=0, column=7, padx=(0, 0), pady=5, sticky="e")
         setattr(self, optmenu_attr, opt_menu)
+        self._tip(opt_menu, "Choose output format: MP4 (default), WebM, or MP3 (audio only)")
 
     def _build_logs_row(self, parent: ctk.CTkFrame, *, label_text: str,
                         logs_label_row: int, logbox_row: int,
@@ -693,6 +741,11 @@ class App(ctk.CTk):
             title="Select text file", filetypes=[("Text files", "*.txt")])
         if not file_path:
             return
+        self._load_text_into(textbox, file_path)
+
+    def _load_text_into(self, textbox: ctk.CTkTextbox, file_path: str) -> None:
+        """Read a .txt file and append its contents into *textbox* with the
+        same newline/logging semantics as import_text_file."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -704,6 +757,117 @@ class App(ctk.CTk):
             textbox.insert("end", "\n" + content)
         else:
             textbox.insert("end", content)
+
+    def _tip(self, widget, message: str, delay: float = 0.4) -> None:
+        """Attach a CTkToolTip to *widget*; silent no-op if CTkToolTip missing."""
+        if CTkToolTip is not None:
+            CTkToolTip(widget, message=message, delay=delay, border_width=0)
+
+    def _build_drop_zone(self, parent: ctk.CTkFrame, *, row: int) -> None:
+        """Wide drop target (matches textbox width) above the buttons row."""
+        drop_frame = ctk.CTkFrame(
+            parent,
+            height=100,
+            corner_radius=12,
+            border_width=2,
+            border_color=("#A07AFF", "#A07AFF"),
+            fg_color=("#FFFFFF", "#1B1B1B"),
+        )
+        drop_frame.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+        drop_frame.grid_propagate(False)
+
+        # Two-state UI: idle label "Drag & drop..." / after-drop label
+        # "File imported" with a small red Cancel (X) button that reverts.
+        drop_label = ctk.CTkLabel(
+            drop_frame, text="Drag & drop a .txt file here",
+            text_color=("gray60", "gray70"), justify="center",
+        )
+        drop_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        cancel_btn = ctk.CTkButton(
+            drop_frame, text="X", width=28, height=28,
+            corner_radius=14,
+            fg_color="#E53935", hover_color="#C62828",
+            text_color="white", font=ctk.CTkFont(size=14, weight="bold"),
+            command=lambda: self._reset_drop_zone(),
+        )
+        # Hidden initially, only shown after a successful drop.
+        cancel_btn.place_forget()
+
+        # Keep references so the drop handler can flip state without rebuilding.
+        self.list_drop_frame = drop_frame
+        self.list_drop_label = drop_label
+        self.list_drop_cancel = cancel_btn
+
+        self._tip(drop_frame, "drag and drop text file")
+
+        # tkdnd not available — keep frame as a static label and bail.
+        if TkinterDnD is None or DND_FILES is None or not getattr(self, "_dnd_ok", False):
+            return
+
+        drop_frame.drop_target_register(DND_FILES)
+        drop_frame.dnd_bind("<<Drop>>", self._on_drop_txt)
+        drop_frame.dnd_bind("<<DropEnter>>", lambda _e: drop_frame.configure(
+            border_color="#C4A6FF", fg_color=("#F5F0FF", "#2A2A2A")))
+        drop_frame.dnd_bind("<<DropLeave>>", lambda _e: drop_frame.configure(
+            border_color=("#A07AFF", "#A07AFF"), fg_color=("#FFFFFF", "#1B1B1B")))
+
+    def _on_drop_txt(self, event) -> None:
+        """Handle a .txt file dropped onto the List tab drop zone."""
+        # event.data carries path(s); splitlist handles Windows {} quoting
+        # and space-separated multi-file drops across platforms.
+        paths = self.tk.splitlist(event.data)
+        if not paths:
+            return
+        path = paths[0]
+        # Strip surrounding braces on Windows (tk.splitlist usually already
+        # does this, but be defensive for paths with spaces).
+        if path.startswith("{") and path.endswith("}"):
+            path = path[1:-1]
+        if not path.lower().endswith(".txt"):
+            self.write_to_log("[Import] Please drop a .txt file.\n")
+            return
+        self._load_text_into(self.links_box_list, path)
+        # Flip the drop zone into the "imported" state with a Cancel button.
+        try:
+            df = getattr(self, "list_drop_frame", None)
+            lbl = getattr(self, "list_drop_label", None)
+            cancel = getattr(self, "list_drop_cancel", None)
+            if df is not None:
+                df.configure(border_color="#4CAF50", fg_color=("#E8F5E9", "#1F2A1F"))
+            if cancel is not None:
+                cancel.place(relx=0.97, rely=0.5, anchor="e")
+            if lbl is not None:
+                lbl.configure(text=f"File imported: {path.split('/')[-1].split(chr(92))[-1]}",
+                              text_color=("#2E7D32", "#81C784"))
+        except Exception:
+            pass
+        self.write_to_log(f"[Import] Loaded: {path}\n")
+
+    def _reset_drop_zone(self) -> None:
+        """Restore the drop zone to its idle state and remove the imported file."""
+        df = getattr(self, "list_drop_frame", None)
+        lbl = getattr(self, "list_drop_label", None)
+        cancel = getattr(self, "list_drop_cancel", None)
+        # Drop any text that came in via the import.
+        try:
+            box = getattr(self, "links_box_list", None)
+            if box is not None:
+                box.configure(state="normal")
+                # Only blank if there's nothing the user typed themselves —
+                # we can't tell, so we always clear on cancel.
+                box.delete("1.0", "end")
+                box.configure(state="disabled")
+        except Exception:
+            pass
+        if cancel is not None:
+            cancel.place_forget()
+        if df is not None:
+            df.configure(border_color=("#A07AFF", "#A07AFF"),
+                         fg_color=("#FFFFFF", "#1B1B1B"))
+        if lbl is not None:
+            lbl.configure(text="Drag & drop a .txt file here",
+                          text_color=("gray60", "gray70"))
 
     # -------- logging -----------------------------------------------------
 
@@ -1086,6 +1250,12 @@ def main() -> None:
     crash_log_path = os.path.join(os.path.dirname(__file__), "crash.log")
 
     def _report_callback_exception(exctype, value, tb):
+        # Suppress the harmless "invalid command name" TclErrors that
+        # CustomTkinter spams while the window is being torn down — the
+        # canvas widgets are already destroyed but CTk's <Configure>
+        # binding still fires one last redraw.
+        if isinstance(value, tk.TclError) and "invalid command name" in str(value):
+            return
         text = "".join(traceback.format_exception(exctype, value, tb))
         sys.stderr.write("\n[TK CALLBACK EXCEPTION]\n" + text + "\n")
         try:
