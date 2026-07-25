@@ -237,6 +237,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         self.paste_button_single = ctk.CTkButton(
             link_frame, text="Paste", width=100,
+            image=self._icon("paste-svgrepo-com", size=18),
+            compound="left",
             text_color=("black", "#A07AFF"),
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#B9B9B9", "#FFFFFF"),
@@ -314,8 +316,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         #   3=links textbox, 4=drop zone (NEW), 5=buttons, 6=options,
         #   7=spacer (weighted), 8=section3 label, 9=video placeholder,
         #   10=logs label, 11=log box.
-        tab.grid_rowconfigure(7, weight=1)  # the natural gap row stretches,
-        #                                  # pushing section 3 cleanly downward
+        tab.grid_rowconfigure(7, weight=1)  # gap above section 3 stretches
+        tab.grid_rowconfigure(12, weight=1)  # log_box (row=12) also stretches
 
         # 1. Location
         self._build_location_row(
@@ -351,6 +353,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         self.list_paste_button = ctk.CTkButton(
             right_buttons, text="Paste", width=100,
+            image=self._icon("paste-svgrepo-com", size=18),
+            compound="left",
             text_color=("black", "#A07AFF"),
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#B9B9B9", "#FFFFFF"),
@@ -383,14 +387,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         self._tip(self.list_download_button, "Download all URLs in the list sequentially")
 
         # Options row
+        # ponytail: caller already shifted row to 6 to make room for drop zone;
+        # no shift_down_rows needed (offset 0).
         self._build_options_row(
-            tab, row=6,  # NOTE: shifted from row 4 to row 6 to make room for drop zone
+            tab, row=6,
             video_var_attr="download_videos_var_2",
             slides_var_attr="download_slides_var_2",
             thumbs_var_attr="download_thumbs_var_2",
             format_var_attr="format_var_2",
             optmenu_attr="opt_format_2",
-            shift_down_rows=2,  # Push subsequent rows down to avoid clashes.
         )
 
         # 3. Get the Video (status banner)
@@ -415,9 +420,12 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
             "<Button-1>", lambda _e: self.open_folder(self._last_video_folder_list))
 
         # Output Logs
+        # ponytail: List tab needs label/logbox rows 11/12 because video_placeholder
+        # already occupies row=10 (without that, Logs label and Copy button overlay
+        # the video banner, that's the bug the user reported twice).
         self._build_logs_row(
             tab, label_text="Logs",
-            logs_label_row=10, logbox_row=11,
+            logs_label_row=11, logbox_row=12,
             logbox_attr="log_box_list",
             initial_text="",
         )
@@ -587,6 +595,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         copy_button = ctk.CTkButton(
             logs_frame, text="Copy", width=80,
+            image=self._icon("copy-svgrepo-com", size=16),
+            compound="left",
             text_color=("black", "white"),
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#B9B9B9", "#FFFFFF"),
@@ -758,6 +768,33 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         else:
             textbox.insert("end", content)
 
+    def _icon(self, name: str, size: int = 16):
+        """Load a small icon from gui-assets/icons/ as a CTkImage.
+
+        Returns None if the asset or Pillow is missing — callers can then
+        fall back to the plain text button label without crashing.
+        """
+        try:
+            from PIL import Image
+        except Exception:
+            return None
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "gui-assets", "icons", f"{name}.png",
+        )
+        if not os.path.isfile(path):
+            return None
+        try:
+            # ponytail: two distinct PIL Image objects (not the same handle). CTk
+            # stores light_image and dark_image in separate Tk PhotoImage
+            # slots; sharing one Image allows GC to chew through the second
+            # slot when sizing kicks in, raising `image "pyimageX" doesn't exist`.
+            light = Image.open(path); light.load()
+            dark = Image.open(path); dark.load()
+            return ctk.CTkImage(light_image=light, dark_image=dark, size=(size, size))
+        except Exception:
+            return None
+
     def _tip(self, widget, message: str, delay: float = 0.4) -> None:
         """Attach a CTkToolTip to *widget*; silent no-op if CTkToolTip missing."""
         if CTkToolTip is not None:
@@ -785,10 +822,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         drop_label.place(relx=0.5, rely=0.5, anchor="center")
 
         cancel_btn = ctk.CTkButton(
-            drop_frame, text="X", width=28, height=28,
-            corner_radius=14,
-            fg_color="#E53935", hover_color="#C62828",
-            text_color="white", font=ctk.CTkFont(size=14, weight="bold"),
+            drop_frame, text="", width=32, height=32,
+            corner_radius=16,
+            fg_color="transparent", hover_color=("#FFE5E5", "#3A1F1F"),
+            image=self._icon("trash-bin-trash-svgrepo-com", size=18),
             command=lambda: self._reset_drop_zone(),
         )
         # Hidden initially, only shown after a successful drop.
