@@ -108,5 +108,5 @@ The GUI wraps the same upstream pipeline (`download_bbb_data.py` → `ffmpeg` mu
 
 ---
 
-Based on [bbb-downloader](https://github.com/soulgalore/bbb-downloader).
+Based on [bbb-downloader](https://github.com/trahay/bbb-downloader).
 Built with [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern Tk design with vibecoding.
