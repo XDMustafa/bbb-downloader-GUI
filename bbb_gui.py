@@ -335,7 +335,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         list_label.grid(row=2, column=0, padx=10, pady=(20, 5), sticky="w")
 
         self.links_box_list = ctk.CTkTextbox(
-            tab, height=100,
+            tab, height=80,
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#A0A0A0", "#3E3E3E"), border_width=1,
         )
