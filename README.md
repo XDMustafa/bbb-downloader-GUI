@@ -117,7 +117,7 @@ Built with [CustomTkinter](https://github.com/TomSchimsky/CustomTkinter) — mod
 
 GNU General Public License v3.0 — full text in [LICENSE](LICENSE).
 
-The `script/` directory holds unmodified files from upstream [bbb-downloader](https://github.com/soulgalore/bbb-downloader) (GPLv3). Credit and copyright for those files belong to their original authors:
+The `script/` directory holds unmodified files from upstream [bbb-downloader](https://github.com/trahay/bbb-downloader) (GPLv3). Credit and copyright for those files belong to their original authors:
 
 - `script/bbb.py` — originated by Olivier Berger for youtube-dl, adapted for BBB.
 - `script/download_bbb_data.py`, `script/integrate_soundtrack.sh`, `script/webm_to_mp4.sh` — bbb-downloader project.
