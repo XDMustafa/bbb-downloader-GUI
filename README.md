@@ -109,4 +109,15 @@ The GUI wraps the same upstream pipeline (`download_bbb_data.py` → `ffmpeg` mu
 ---
 
 Based on [bbb-downloader](https://github.com/trahay/bbb-downloader).
-Built with [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern Tk design with vibecoding.
+Built with [CustomTkinter](https://github.com/TomSchimsky/CustomTkinter) — modern Tk design with vibecoding.
+
+---
+
+## License
+
+GNU General Public License v3.0 — full text in [LICENSE](LICENSE).
+
+The `script/` directory holds unmodified files from upstream [bbb-downloader](https://github.com/soulgalore/bbb-downloader) (GPLv3). Credit and copyright for those files belong to their original authors:
+
+- `script/bbb.py` — originated by Olivier Berger for youtube-dl, adapted for BBB.
+- `script/download_bbb_data.py`, `script/integrate_soundtrack.sh`, `script/webm_to_mp4.sh` — bbb-downloader project.
