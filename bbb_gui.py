@@ -34,6 +34,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -187,13 +188,14 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
             placeholder_text="Custom FFmpeg path (leave empty for auto-detect)",
             height=32,
         )
+
         self.ffmpeg_path_entry.grid(row=0, column=0, padx=(0, 10), sticky="ew")
 
         self.ffmpeg_btn = ctk.CTkButton(
             bottom_frame,
             text="Check / Download FFmpeg",
-            text_color="#000000",          # black text in both themes & states
-            fg_color=("#EBEBEB", "#EBEBEB"),   # off-white solid in both themes
+            text_color=("#FFFFFF", "#000000"),          # black text in both themes & states
+            fg_color=("#545454", "#EBEBEB"),   # off-white solid in both themes
             hover_color=("#D6D6D6", "#D6D6D6"), # slightly darker on hover
             border_width=0,
             command=self.check_or_download_ffmpeg,
@@ -237,7 +239,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         self.paste_button_single = ctk.CTkButton(
             link_frame, text="Paste", width=100,
-            image=self._icon("paste-svgrepo-com", size=18),
+            image=self._icon("paste-icon", size=18),
             compound="left",
             text_color=("black", "#A07AFF"),
             fg_color=("#FFFFFF", "#1B1B1B"),
@@ -353,7 +355,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         self.list_paste_button = ctk.CTkButton(
             right_buttons, text="Paste", width=100,
-            image=self._icon("paste-svgrepo-com", size=18),
+            image=self._icon("paste-icon", size=18),
             compound="left",
             text_color=("black", "#A07AFF"),
             fg_color=("#FFFFFF", "#1B1B1B"),
@@ -368,6 +370,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
 
         self.list_import_button = ctk.CTkButton(
             right_buttons, text="Import txt", width=100,
+            image=self._icon("import-txt", size=18),
+            compound="left",
             text_color=("black", "#A07AFF"),
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#B9B9B9", "#FFFFFF"),
@@ -594,9 +598,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
         setattr(self, logbox_attr, log_box)
 
         copy_button = ctk.CTkButton(
-            logs_frame, text="Copy", width=80,
-            image=self._icon("copy-svgrepo-com", size=16),
-            compound="left",
+            logs_frame, text="", width=36,
+            image=self._icon("copy-icon", size=16),
             text_color=("black", "white"),
             fg_color=("#FFFFFF", "#1B1B1B"),
             border_color=("#B9B9B9", "#FFFFFF"),
@@ -705,6 +708,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
                 return
 
         if not clipboard_content:
+            self.write_to_log("[Clipboard] Clipboard is empty — nothing to paste.\n")
             return
 
         # The actual insert must also be defensively wrapped. Some widgets
@@ -771,26 +775,36 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
     def _icon(self, name: str, size: int = 16):
         """Load a small icon from gui-assets/icons/ as a CTkImage.
 
-        Returns None if the asset or Pillow is missing — callers can then
-        fall back to the plain text button label without crashing.
+        Tries theme-aware pair first: {name}-dark.png + {name}-light.png.
+        Falls back to {name}.png for theme-neutral icons.
+        Returns None if the asset or Pillow is missing.
+        PyInstaller-aware: uses sys._MEIPASS when frozen.
         """
         try:
             from PIL import Image
         except Exception:
             return None
-        path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "gui-assets", "icons", f"{name}.png",
-        )
-        if not os.path.isfile(path):
+        # ponytail: PyInstaller puts bundled assets under sys._MEIPASS;
+        # when running from source, __file__'s dir is correct.
+        base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+        icons_dir = os.path.join(base, "gui-assets", "icons")
+        # ponytail: pick which file to load based on the live CTk theme
+        try:
+            theme = ctk.get_appearance_mode().lower()
+        except Exception:
+            theme = "dark"
+        variant = "light" if "light" in theme else "dark"
+        themed = os.path.join(icons_dir, f"{name}-{variant}.png")
+        neutral = os.path.join(icons_dir, f"{name}.png")
+        if os.path.isfile(themed):
+            path = themed
+        elif os.path.isfile(neutral):
+            path = neutral
+        else:
             return None
         try:
-            # ponytail: two distinct PIL Image objects (not the same handle). CTk
-            # stores light_image and dark_image in separate Tk PhotoImage
-            # slots; sharing one Image allows GC to chew through the second
-            # slot when sizing kicks in, raising `image "pyimageX" doesn't exist`.
-            light = Image.open(path); light.load()
             dark = Image.open(path); dark.load()
+            light = Image.open(path); light.load()
             return ctk.CTkImage(light_image=light, dark_image=dark, size=(size, size))
         except Exception:
             return None
@@ -825,7 +839,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
             drop_frame, text="", width=32, height=32,
             corner_radius=16,
             fg_color="transparent", hover_color=("#FFE5E5", "#3A1F1F"),
-            image=self._icon("trash-bin-trash-svgrepo-com", size=18),
+            image=self._icon("trash-icon", size=18),
             command=lambda: self._reset_drop_zone(),
         )
         # Hidden initially, only shown after a successful drop.
@@ -1078,24 +1092,24 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper if TkinterDnD else object):
                 # Wire the click handler. We must bind to both the new link
                 # label and the existing `label` widget for fall-through.
                 if clickable:
-                    # The folder path is stashed on the parent before this
-                    # call by the caller.
-                    folder = getattr(parent, "_link_target", None)
+                    # ponytail: defer folder read to callback time — at bind
+                    # time parent._link_target is still None, so capturing it
+                    # via default-arg gets a stale None (Critical #1 from
+                    # ADR-001 code review).
                     parent._link_label.bind(
                         "<Button-1>",
-                        lambda _e, f=folder: self.open_folder(f),
+                        lambda _e: self.open_folder(getattr(parent, "_link_target", None)),
                     )
             else:
                 # Reuse existing widgets; update only text/colors.
                 parent._plain_link_label.configure(text=plain_part, text_color=plain_color)
                 parent._link_label.configure(text=link_part, text_color=color)
                 if clickable:
-                    folder = getattr(parent, "_link_target", None)
                     # Re-bind to the latest folder; unbind first to be safe.
                     parent._link_label.unbind("<Button-1>")
                     parent._link_label.bind(
                         "<Button-1>",
-                        lambda _e, f=folder: self.open_folder(f),
+                        lambda _e: self.open_folder(getattr(parent, "_link_target", None)),
                     )
             # Stash the target on parent so the binding above (and later
             # re-binds) can pick it up.

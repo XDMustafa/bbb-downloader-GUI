@@ -23,3 +23,10 @@ debug_diagnose_url.py
 
 # In-app FFmpeg downloads (ffmpeg-all-version cache)
 ffmpeg All version/
+
+# Icon build intermediates (only .icns and .ico are kept)
+gui-assets/icons/BBBDownloader.iconset/
+gui-assets/icons/icon.png
+
+# Secondary spec (console-only debug variant)
+main.spec

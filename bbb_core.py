@@ -202,13 +202,21 @@ class DownloadThread(threading.Thread):
         if not self.url:
             raise ValueError("Download link cannot be empty.")
         if not detect_ffmpeg():
-            # Don't crash — let the GUI know FFmpeg isn't installed.
-            self.log("[FFmpeg] FFmpeg not found. The 'Check / Download FFmpeg' "
-                     "button should be used before re-trying the download.")
+            # ponytail: raise here so run() never proceeds without ffmpeg;
+            # the GUI's _report_callback_exception hook surfaces this to the
+            # log box as a friendly message instead of a downstream crash.
+            raise RuntimeError(
+                "FFmpeg is not installed. Use the 'Check / Download FFmpeg' "
+                "button before retrying the download."
+            )
 
     def _ensure_ffmpeg(self) -> None:
         # Re-detect in case the user installed FFmpeg after launching the app.
-        ffmpeg_tools.detect_ffmpeg()
+        if not ffmpeg_tools.detect_ffmpeg():
+            raise RuntimeError(
+                "FFmpeg is not installed. Use the 'Check / Download FFmpeg' "
+                "button before retrying the download."
+            )
 
     # ---- step 1: upstream script --------------------------------------
 
